@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>★★★绝密</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+    <style>
+        body, html {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            font-family: "微软雅黑";
+            display: flex;
+        }
+        
+        #container {
+            width: 70%;
+            height: 100%;
+        }
+
+        #vehicle-table {
+            width: 30%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #f4f4f4;
+            border-left: 1px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #vehicle-table table {
+            width: 100%;
+            border-collapse: collapse;
+            flex-grow: 1;
+        }
+
+        #vehicle-table th, #vehicle-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        #update-time {
+            text-align: center;
+            padding: 10px;
+            font-size: 14px;
+            background-color: #e9e9e9;
+            border-top: 1px solid #ddd;
+        }
+
+        #prompt {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            width: 100%;
+        }
+
+        #prompt button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="prompt">
+        <h1>不同意的有没有？</h1>
+        <button onclick="agree(false)">有</button>
+        <button onclick="agree(true)">没有</button>
+    </div>
+
+    <div id="container" style="display: none;"></div>
+    <div id="vehicle-table" style="display: none;">
+        <h2>车辆信息</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>车辆ID</th>
+                    <th>车牌号</th>
+                    <th>是否在线</th>
+                </tr>
+            </thead>
+            <tbody id="vehicle-data">
+            </tbody>
+        </table>
+        <div id="update-time">上次更新时间：未更新</div>
+    </div>
+
+    <script>
+        var map;
+
+        function loadJScript() {
+            var script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = '//api.map.baidu.com/api?type="你的百度开发者密钥"&callback=init';
+            document.body.appendChild(script);
+        }
+
+        function init() {
+            map = new BMapGL.Map('container');
+            var point = new BMapGL.Point(116.404, 39.915);
+            map.centerAndZoom(point, 10);
+            map.enableScrollWheelZoom();
+            
+            var scaleCtrl = new BMapGL.ScaleControl();
+            map.addControl(scaleCtrl);
+            var zoomCtrl = new BMapGL.ZoomControl();
+            map.addControl(zoomCtrl);
+            var navi3DCtrl = new BMapGL.NavigationControl3D();
+            map.addControl(navi3DCtrl);
+
+
+            var locationControl = new BMapGL.LocationControl({
+                anchor: BMAP_ANCHOR_TOP_RIGHT,
+                offset: new BMapGL.Size(20, 20)
+            });
+            map.addControl(locationControl);
+            locationControl.addEventListener("locationSuccess", function(e) {
+                var address = '';
+                address += e.addressComponent.province;
+                address += e.addressComponent.city;
+                address += e.addressComponent.district;
+                address += e.addressComponent.street;
+                address += e.addressComponent.streetNumber;
+                alert("当前定位地址为：" + address);
+            });
+            locationControl.addEventListener("locationError", function(e) {
+                alert(e.message);
+            });
+			
+
+            var cityControl = new BMapGL.CityListControl({
+                anchor: BMAP_ANCHOR_TOP_LEFT,
+                offset: new BMapGL.Size(10, 5)
+            });
+            map.addControl(cityControl);
+
+
+            loadVehicleData();
+            loadLocationData();
+
+
+            setInterval(function() {
+                loadVehicleData();
+                loadLocationData();
+            }, 5000);
+        }
+
+        function loadLocationData() {
+            map.clearOverlays();
+
+            fetch('你的 VehicleLoc api')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.code === 0) {
+                        data.data.forEach(location => {
+                            var point = new BMapGL.Point(parseFloat(location.log), parseFloat(location.lat));
+                            var marker = new BMapGL.Marker(point);
+                            map.addOverlay(marker);
+                        });
+                    } else {
+                        console.error('Failed to fetch location data:', data.message);
+                    }
+                })
+                .catch(error => console.error('Error fetching location data:', error));
+        }
+
+        function loadVehicleData() {
+            fetch('你的 Vehicle api')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.code === 0) {
+                        var tableBody = document.getElementById('vehicle-data');
+                        tableBody.innerHTML = '';
+                        data.data.forEach(vehicle => {
+                            var row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${vehicle.id}</td>
+                                <td>${vehicle.license}</td>
+                                <td>${vehicle.isonline ? '在线' : '离线'}</td>
+                            `;
+                            tableBody.appendChild(row);
+                        });
+                        updateTime();
+                    } else {
+                        console.error('Failed to fetch vehicle data:', data.message);
+                    }
+                })
+                .catch(error => console.error('Error fetching vehicle data:', error));
+        }
+
+        function updateTime() {
+            var now = new Date();
+            var timeString = now.getFullYear() + '年' + 
+                             (now.getMonth() + 1) + '月' + 
+                             now.getDate() + '日 ' + 
+                             now.getHours() + ':' + 
+                             now.getMinutes() + ':' + 
+                             now.getSeconds();
+            document.getElementById('update-time').innerText = '上次更新时间：' + timeString;
+        }
+
+        function agree(isAgreed) {
+            if (isAgreed) {
+                document.getElementById('prompt').style.display = 'none';
+                document.getElementById('container').style.display = 'block';
+                document.getElementById('vehicle-table').style.display = 'block';
+                loadJScript();
+            } else {
+                alert("你年龄大了 不用参与了 先回去休息吧");
+            }
+        }
+
+        window.onload = function() {
+            document.getElementById('prompt').style.display = 'flex';
+        };
+    </script>
+</body>
+</html>
